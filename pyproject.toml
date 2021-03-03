@@ -24,3 +24,6 @@ requires = [
 
 [tool.flit.scripts]
 cascadetoml = "cascadetoml:app"
+
+[tool.flit.sdist]
+exclude = ["LICENSES"]
