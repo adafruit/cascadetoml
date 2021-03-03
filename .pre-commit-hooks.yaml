@@ -1,0 +1,7 @@
+-   id: cascadetoml-check
+    name: Check TOML cascade tree
+    description: This hook checks that TOML files match the template at the root
+    entry: cascadetoml check
+    language: python
+    types: [text]
+    pass_filenames: false
