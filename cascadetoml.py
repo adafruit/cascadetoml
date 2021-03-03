@@ -11,7 +11,7 @@ import tomlkit
 import parse
 
 # grumble grumble. This is the VCS' job.
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 app = typer.Typer()
 
