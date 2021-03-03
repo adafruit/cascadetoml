@@ -2,9 +2,7 @@ Introduction
 ============
 
 [![Discord](https://img.shields.io/discord/327254708534116352.svg)](https://adafru.it/discord)
-
 [![Build Status](https://github.com/adafruit/cascadetoml/workflows/Build%20CI/badge.svg)](https://github.com/adafruit/cascadetoml/actions)
-
 [![Code Style: Black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
 Command for cascading toml "databases" into their full objects
@@ -17,6 +15,8 @@ The root of a cascade has two files that define it:
 * `.cascade.toml` defines settings for `cascadetoml`. Settings are:
   * `paths` a list of strings where each string is a python format-style string. These strings are used to pull out setting defined by the path.
 * `<type>.template.toml` defines the full structure of the resulting TOML object. `<type>` is used as the name for the array of tables output when a cascade results in multiple objects. The keys in the table are the only ones allowed in TOML files within the tree. The types of values must also be consistent.
+
+Settings for a particular folder are in a TOML file with the folder name plus the `.toml` extension.
 
 The first repo using this is the
 [`nvm.toml`](https://github.com/adafruit/nvm.toml) repo. Its only path is `{technology}/{manufacturer}/{sku}.toml`. A file such as `flash/gigadevice/GD1.toml` will have the implicit values:
