@@ -9,14 +9,11 @@ app = typer.Typer()
 refactor_app = typer.Typer()
 app.add_typer(refactor_app, name="refactor")
 
-@app.command()
-def cascade(paths: typing.List[pathlib.Path]):
-    """Produce cascaded toml objects for each given path."""
-    print("cascade")
-    output_doc = tomlkit.document()
+cascade_app = typer.Typer()
+app.add_typer(cascade_app, name="cascade")
 
-    if len(paths) > 1:
-        output_doc["nvm"] = tomlkit.aot() # short for array of tables
+def _cascade(paths: typing.List[pathlib.Path]) -> tomlkit.document:
+    output_doc = tomlkit.document()
 
     root_cache = {}
     for path in paths:
@@ -29,13 +26,31 @@ def cascade(paths: typing.List[pathlib.Path]):
                 root = possible_root
                 break
         if not root:
-            print("No root found for {}", path)
+            print("No root found for", path)
             continue
 
         if root not in root_cache:
-            root_cache[root] = tomlkit.parse(root.read_text())
+            loaded_info = tomlkit.parse(root.read_text())
+            root_cache[root] = loaded_info
+            implied_paths = []
+            for path_template in loaded_info["paths"]:
+                path_template = pathlib.Path(path_template)
+                for parent in path_template.parents:
+                    if not parent.name:
+                        continue
+                    implied_paths.append(str(parent / (parent.name + ".toml")))
+            # Extend is broken on tomlkit array so do it manually
+            for implied_path in implied_paths:
+                loaded_info["paths"].append(implied_path)
         root_info = root_cache[root]
         root_relative = full_path.relative_to(root.parent)
+
+        template = list(root.parent.glob("*.template.toml"))
+        if not template or len(template) > 1:
+            print("No template found for", path)
+            continue
+
+        object_type = template[0].name[:-len(".template.toml")]
 
         try:
             parsed_leaf = tomlkit.parse(full_path.read_text())
@@ -49,7 +64,9 @@ def cascade(paths: typing.List[pathlib.Path]):
             output_table = tomlkit.table()
             output_table.add(c)
             output_table.add(tomlkit.nl())
-            output_doc["nvm"].append(output_table)
+            if object_type not in output_doc:
+                output_doc[object_type] = tomlkit.aot() # short for array of tables
+            output_doc[object_type].append(output_table)
         else:
             output_doc.add(c)
             output_table = output_doc
@@ -63,12 +80,11 @@ def cascade(paths: typing.List[pathlib.Path]):
                 parsed_path = found
                 template_path = template
                 break
-            else:
-                print(template, root_relative)
 
-        output_table.add(tomlkit.comment("Data inferred from the path: {}".format(template_path)))
-        for k in parsed_path.named:
-            output_table[k] = parsed_path.named[k]
+        if parsed_path:
+            output_table.add(tomlkit.comment("Data inferred from the path: {}".format(template_path)))
+            for k in parsed_path.named:
+                output_table[k] = parsed_path.named[k]
 
         for parent in reversed(full_path.parents):
             if not parent.is_relative_to(root.parent):
@@ -90,7 +106,7 @@ def cascade(paths: typing.List[pathlib.Path]):
                 raise typer.Exit(code=3)
 
             output_table.add(tomlkit.nl())
-            output_table.add(tomlkit.comment("Data from {}".format(root_relative)))
+            output_table.add(tomlkit.comment("Data from {}".format(parent_toml.relative_to(root.parent))))
             for item in parsed_parent.body:
                 key, value = item
                 output_table.add(key, value)
@@ -100,10 +116,52 @@ def cascade(paths: typing.List[pathlib.Path]):
         for item in parsed_leaf.body:
             key, value = item
             output_table.add(key, value)
+    return output_doc
+
+@cascade_app.command()
+def files(paths: typing.List[pathlib.Path]):
+    """Produce cascaded toml objects for each given path."""
+    print("cascade")
+    output_doc = _cascade(paths)
+    print(tomlkit.dumps(output_doc))
+
+@cascade_app.command()
+def filter(root: pathlib.Path = typer.Option(".", help="Path to a cascade root. (Where `.cascade.toml` lives.)"),
+           filters: typing.List[str] = typer.Argument(None, help="TOML values that must match")):
+    """Produce cascaded toml objects for each given path."""
+    root_toml = root / ".cascade.toml"
+    if not root_toml.exists():
+        print("Missing root .cascade.toml")
+        raise typer.Exit(code=5)
+
+
+    template = list(root.glob("*.template.toml"))
+    if not template or len(template) > 1:
+        print("No template found for", path)
+        raise typer.Exit(code=6)
+
+    object_type = template[0].name[:-len(".template.toml")]
+
+    acceptable_values = {}
+    for f in filters:
+        parsed = tomlkit.parse(f)
+        for k in parsed:
+            if k not in acceptable_values:
+                acceptable_values[k] = []
+            acceptable_values[k].append(parsed[k])
+
+    output_doc = _cascade(list(root.glob("*/**/*.toml")))
+
+    for i in range(len(output_doc[object_type]) - 1, -1, -1):
+        entry = output_doc[object_type][i]
+        for k in acceptable_values:
+            if k not in entry or entry[k] not in acceptable_values[k]:
+                del output_doc[object_type].body[i]
+
     print(tomlkit.dumps(output_doc))
 
 @app.command()
-def check(root: pathlib.Path):
+def check(root: pathlib.Path = typer.Option(".", help="Path to a cascade root. (Where `.cascade.toml` lives.)")):
     """Check that all toml under the given path are parse and match the template."""
     possible_templates = list(root.glob("*.template.toml"))
     if len(possible_templates) > 1:
@@ -198,7 +256,7 @@ def _coalesce(path: pathlib.Path):
 
 
 @refactor_app.command()
-def coalesce(root: pathlib.Path):
+def coalesce(root: pathlib.Path = typer.Option(".", help="Path to a cascade root. (Where `.cascade.toml` lives.)")):
     """Move common definitions to shared tomls"""
     _coalesce(root)
 
