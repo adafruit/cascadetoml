@@ -1,8 +1,17 @@
-import typer
-import tomlkit
+# SPDX-FileCopyrightText: Copyright (c) 2021 Scott Shawcroft for Adafruit Industries
+#
+# SPDX-License-Identifier: MIT
+
+"""Command for cascading toml files together"""
+
 import pathlib
 import typing
+import typer
+import tomlkit
 import parse
+
+# grumble grumble. This is the VCS' job.
+__version__ = "0.1.0"
 
 app = typer.Typer()
 
@@ -12,7 +21,9 @@ app.add_typer(refactor_app, name="refactor")
 cascade_app = typer.Typer()
 app.add_typer(cascade_app, name="cascade")
 
+
 def _cascade(paths: typing.List[pathlib.Path]) -> tomlkit.document:
+    # pylint: disable=too-many-locals,too-many-branches,too-many-statements
     output_doc = tomlkit.document()
 
     root_cache = {}
@@ -50,25 +61,25 @@ def _cascade(paths: typing.List[pathlib.Path]) -> tomlkit.document:
             print("No template found for", path)
             continue
 
-        object_type = template[0].name[:-len(".template.toml")]
+        object_type = template[0].name[: -len(".template.toml")]
 
         try:
             parsed_leaf = tomlkit.parse(full_path.read_text())
-        except tomlkit.exceptions.ParseError as e:
+        except tomlkit.exceptions.ParseError as error:
             print("Error parsing {}".format(path))
-            print(e)
+            print(error)
             continue
 
-        c = tomlkit.comment("Data for path: {}".format(root_relative))
+        comment = tomlkit.comment("Data for path: {}".format(root_relative))
         if len(paths) > 1:
             output_table = tomlkit.table()
-            output_table.add(c)
+            output_table.add(comment)
             output_table.add(tomlkit.nl())
             if object_type not in output_doc:
-                output_doc[object_type] = tomlkit.aot() # short for array of tables
+                output_doc[object_type] = tomlkit.aot()  # short for array of tables
             output_doc[object_type].append(output_table)
         else:
-            output_doc.add(c)
+            output_doc.add(comment)
             output_table = output_doc
 
         # print(path, path.stem, path.parent.stem)
@@ -82,7 +93,9 @@ def _cascade(paths: typing.List[pathlib.Path]) -> tomlkit.document:
                 break
 
         if parsed_path:
-            output_table.add(tomlkit.comment("Data inferred from the path: {}".format(template_path)))
+            output_table.add(
+                tomlkit.comment("Data inferred from the path: {}".format(template_path))
+            )
             for k in parsed_path.named:
                 output_table[k] = parsed_path.named[k]
 
@@ -100,13 +113,17 @@ def _cascade(paths: typing.List[pathlib.Path]) -> tomlkit.document:
             parsed_parent = {}
             try:
                 parsed_parent = tomlkit.parse(parent_toml.read_text())
-            except tomlkit.exceptions.ParseError as e:
+            except tomlkit.exceptions.ParseError as error:
                 print("Error parsing {}".format(path))
-                print(e)
+                print(error)
                 raise typer.Exit(code=3)
 
             output_table.add(tomlkit.nl())
-            output_table.add(tomlkit.comment("Data from {}".format(parent_toml.relative_to(root.parent))))
+            output_table.add(
+                tomlkit.comment(
+                    "Data from {}".format(parent_toml.relative_to(root.parent))
+                )
+            )
             for item in parsed_parent.body:
                 key, value = item
                 output_table.add(key, value)
@@ -118,6 +135,7 @@ def _cascade(paths: typing.List[pathlib.Path]) -> tomlkit.document:
             output_table.add(key, value)
     return output_doc
 
+
 @cascade_app.command()
 def files(paths: typing.List[pathlib.Path]):
     """Produce cascaded toml objects for each given path."""
@@ -125,26 +143,32 @@ def files(paths: typing.List[pathlib.Path]):
     output_doc = _cascade(paths)
     print(tomlkit.dumps(output_doc))
 
+
 @cascade_app.command()
-def filter(root: pathlib.Path = typer.Option(".", help="Path to a cascade root. (Where `.cascade.toml` lives.)"),
-           filters: typing.List[str] = typer.Argument(None, help="TOML values that must match")):
+def filter(
+    root: pathlib.Path = typer.Option(
+        ".", help="Path to a cascade root. (Where `.cascade.toml` lives.)"
+    ),
+    filters: typing.List[str] = typer.Argument(
+        None, help="TOML values that must match"
+    ),
+):  # pylint: disable=redefined-builtin
     """Produce cascaded toml objects for each given path."""
     root_toml = root / ".cascade.toml"
     if not root_toml.exists():
         print("Missing root .cascade.toml")
         raise typer.Exit(code=5)
 
-
     template = list(root.glob("*.template.toml"))
     if not template or len(template) > 1:
-        print("No template found for", path)
+        print("No template found for root", root)
         raise typer.Exit(code=6)
 
-    object_type = template[0].name[:-len(".template.toml")]
+    object_type = template[0].name[: -len(".template.toml")]
 
     acceptable_values = {}
-    for f in filters:
-        parsed = tomlkit.parse(f)
+    for filter_toml in filters:
+        parsed = tomlkit.parse(filter_toml)
         for k in parsed:
             if k not in acceptable_values:
                 acceptable_values[k] = []
@@ -160,8 +184,13 @@ def filter(root: pathlib.Path = typer.Option(".", help="Path to a cascade root. 
 
     print(tomlkit.dumps(output_doc))
 
+
 @app.command()
-def check(root: pathlib.Path = typer.Option(".", help="Path to a cascade root. (Where `.cascade.toml` lives.)")):
+def check(
+    root: pathlib.Path = typer.Option(
+        ".", help="Path to a cascade root. (Where `.cascade.toml` lives.)"
+    )
+):
     """Check that all toml under the given path are parse and match the template."""
     possible_templates = list(root.glob("*.template.toml"))
     if len(possible_templates) > 1:
@@ -179,9 +208,10 @@ def check(root: pathlib.Path = typer.Option(".", help="Path to a cascade root. (
         parsed_leaf = {}
         try:
             parsed_leaf = tomlkit.parse(tomlfile.read_text())
-        except tomlkit.exceptions.ParseError as e:
-            errors.append("Parse error: {}".format(e))
+        except tomlkit.exceptions.ParseError as error:
+            errors.append("Parse error: {}".format(error))
         for k in parsed_leaf:
+            # pylint: disable=unidiomatic-typecheck
             if k not in toml_template:
                 errors.append("Unknown key {}".format(k))
             elif type(toml_template[k]) != type(parsed_leaf[k]):
@@ -189,15 +219,17 @@ def check(root: pathlib.Path = typer.Option(".", help="Path to a cascade root. (
         error_count += len(errors)
         if errors:
             print("Error(s) in {}:".format(root_relative))
-            for e in errors:
-                print("\t" + e)
+            for error in errors:
+                print("\t" + error)
             print()
 
     if error_count > 0:
         raise typer.Exit(code=-1 * error_count)
 
+
 # Recursion!
 def _coalesce(path: pathlib.Path):
+    # pylint: disable=too-many-branches
     if path.is_dir():
         shared = None
         for entry in path.iterdir():
@@ -216,7 +248,7 @@ def _coalesce(path: pathlib.Path):
                         different_keys.append(k)
                 for k in different_keys:
                     del shared[k]
-            elif data is {}:
+            elif data == {}:
                 shared = {}
         if not shared:
             return shared
@@ -225,7 +257,7 @@ def _coalesce(path: pathlib.Path):
         if dir_toml.exists():
             try:
                 existing = tomlkit.parse(dir_toml.read_text())
-            except tomlkit.exceptions.ParseError as e:
+            except tomlkit.exceptions.ParseError:
                 # {} means nothing is shared
                 return {}
         for k in shared:
@@ -246,19 +278,24 @@ def _coalesce(path: pathlib.Path):
                 entry.write_text(tomlkit.dumps(existing))
         return shared
 
-    elif path.is_file() and len(path.suffixes) == 1 and path.suffix == ".toml":
+    if path.is_file() and len(path.suffixes) == 1 and path.suffix == ".toml":
         try:
             return tomlkit.parse(path.read_text())
-        except tomlkit.exceptions.ParseError as e:
+        except tomlkit.exceptions.ParseError:
             # {} means nothing is shared
             return {}
     return None
 
 
 @refactor_app.command()
-def coalesce(root: pathlib.Path = typer.Option(".", help="Path to a cascade root. (Where `.cascade.toml` lives.)")):
+def coalesce(
+    root: pathlib.Path = typer.Option(
+        ".", help="Path to a cascade root. (Where `.cascade.toml` lives.)"
+    )
+):
     """Move common definitions to shared tomls"""
     _coalesce(root)
+
 
 if __name__ == "__main__":
     app()

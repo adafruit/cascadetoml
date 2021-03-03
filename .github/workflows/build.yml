@@ -1,0 +1,35 @@
+# SPDX-FileCopyrightText: 2017 Scott Shawcroft, written for Adafruit Industries
+#
+# SPDX-License-Identifier: MIT
+
+name: Build CI
+
+on: [pull_request, push]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Dump GitHub context
+      env:
+        GITHUB_CONTEXT: ${{ toJson(github) }}
+      run: echo "$GITHUB_CONTEXT"
+    - name: Set up Python 3.6
+      uses: actions/setup-python@v1
+      with:
+        python-version: 3.6
+    - name: Versions
+      run: |
+        python3 --version
+    - name: Checkout Current Repo
+      uses: actions/checkout@v1
+      with:
+        submodules: true
+    - name: Pip install pylint, pre-commit
+      run: |
+        pip install --force-reinstall pylint pre-commit
+    - name: Library version
+      run: git describe --dirty --always --tags
+    - name: Pre-commit hooks
+      run: |
+        pre-commit run --all-files

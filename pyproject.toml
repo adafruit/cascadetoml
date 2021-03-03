@@ -1,0 +1,26 @@
+# SPDX-FileCopyrightText: 2020 Diego Elio Pettenò
+#
+# SPDX-License-Identifier: Unlicense
+
+[tool.black]
+target-version = ['py35']
+
+[build-system]
+requires = ["flit_core >=2,<4"]
+build-backend = "flit_core.buildapi"
+
+[tool.flit.metadata]
+module = "cascadetoml"
+author = "Scott Shawcroft"
+author-email = "scott@tannewt.org"
+home-page = "https://github.com/adafruit/cascadetoml"
+classifiers = [ "License :: OSI Approved :: MIT License",]
+description-file = "README.md"
+requires = [
+    "parse",
+    "tomlkit",
+    "typer"
+]
+
+[tool.flit.scripts]
+cascadetoml = "cascadetoml:app"
