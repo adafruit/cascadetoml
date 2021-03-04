@@ -11,7 +11,7 @@ import tomlkit
 import parse
 
 # grumble grumble. This is the VCS' job.
-__version__ = "0.1.1"
+__version__ = "0.1.2"
 
 app = typer.Typer()
 
@@ -100,9 +100,11 @@ def _cascade(paths: typing.List[pathlib.Path]) -> tomlkit.document:
                 output_table[k] = parsed_path.named[k]
 
         for parent in reversed(full_path.parents):
+            # Skip if the parent is higher than the root.
             if not parent.is_relative_to(root.parent):
                 continue
-            if parent.stem == full_path.parent.stem:
+            # Skip if the full_path is a directory toml.
+            if parent.stem == full_path.stem:
                 continue
 
             parent_toml = parent / (parent.stem + ".toml")
