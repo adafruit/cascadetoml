@@ -4,14 +4,18 @@
 
 """Command for cascading toml files together"""
 
+import csv
 import pathlib
+import sys
 import typing
 import typer
 import tomlkit
 import parse
 
+import tabulate as tabulate_lib
+
 # grumble grumble. This is the VCS' job.
-__version__ = "0.1.2"
+__version__ = "0.2.0"
 
 app = typer.Typer()
 
@@ -298,6 +302,91 @@ def coalesce(
     """Move common definitions to shared tomls"""
     _coalesce(root)
 
+def _toml_to_row(path, root_info, headers):
+    leaf = tomlkit.parse(path.read_text())
+
+    parsed_path = None
+    template_path = None
+    for template in reversed(root_info["paths"]):
+        found = parse.parse(template, str(path))
+        if found:
+            parsed_path = found
+            template_path = template
+            break
+
+    if parsed_path:
+        for k in parsed_path.named:
+            leaf[k] = parsed_path.named[k]
+    row = []
+    for header in headers:
+        value = None
+        if header in leaf:
+            value = leaf[header]
+        row.append(value)
+    return row
+
+
+def _tabulate(root, root_info, headers, depth=0):
+    rows = []
+    for p in sorted(root.iterdir()):
+        if p.name[0] == ".":
+            continue
+        if p.is_dir():
+            rows.append(_toml_to_row(p / (p.name + ".toml"), root_info, headers))
+            rows.extend(_tabulate(p, root_info, headers, depth+1))
+        elif depth > 0:
+            if p.stem == root.name:
+                continue
+            rows.append(_toml_to_row(p, root_info, headers))
+
+    return rows
+
+@app.command()
+def tabulate(
+    root: pathlib.Path = typer.Option(
+        ".", help="Path to a cascade root. (Where `.cascade.toml` lives.)"
+    ),
+    output_format: str = typer.Option(
+        "simple", help="tabulate library format or csv"
+    ),
+
+    ):
+    root_toml = root / ".cascade.toml"
+    if not root_toml.exists():
+        print("Missing root .cascade.toml")
+        raise typer.Exit(code=5)
+    root_info = tomlkit.parse(root_toml.read_text())
+
+    template = list(root.glob("*.template.toml"))
+    if not template or len(template) > 1:
+        print("No template found for root", root)
+        raise typer.Exit(code=6)
+    toml_template = tomlkit.parse(template[0].read_text())
+
+    implicit_keys = []
+    implied_paths = []
+    for p in root_info["paths"]:
+        implicit_keys.extend(parse.compile(p).named_fields)
+        p = pathlib.Path(p)
+        for parent in p.parents:
+            if not parent.name:
+                continue
+            implied_paths.append(str(parent / (parent.name + ".toml")))
+
+    # Extend is broken on tomlkit array so do it manually
+    for implied_path in implied_paths:
+        root_info["paths"].append(implied_path)
+
+    headers = implicit_keys + list(toml_template.keys())
+
+    data = _tabulate(root, root_info, headers)
+
+    if output_format != "csv":
+        print(tabulate_lib.tabulate(data, headers=headers, tablefmt=output_format, disable_numparse=True))
+    else:
+        csvout = csv.writer(sys.stdout)
+        csvout.writerow(headers)
+        csvout.writerows(data)
 
 if __name__ == "__main__":
     app()

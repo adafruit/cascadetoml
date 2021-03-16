@@ -18,6 +18,7 @@ classifiers = [ "License :: OSI Approved :: MIT License",]
 description-file = "README.md"
 requires = [
     "parse",
+    "tabulate",
     "tomlkit",
     "typer"
 ]
