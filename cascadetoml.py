@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # SPDX-FileCopyrightText: Copyright (c) 2021 Scott Shawcroft for Adafruit Industries
 #
 # SPDX-License-Identifier: MIT
