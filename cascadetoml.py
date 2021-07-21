@@ -172,8 +172,6 @@ def filter_toml(
                 acceptable_values[k] = []
             acceptable_values[k].append(parsed[k])
 
-    print(acceptable_values)
-
     output_doc = cascade(list(root.glob("*/**/*.toml")))
 
     for i in range(len(output_doc[object_type]) - 1, -1, -1):

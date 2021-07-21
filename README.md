@@ -61,6 +61,15 @@ source .env/bin/activate
 pip3 install cascadetoml
 ```
 
+Installing for development
+==========================
+
+`cascadetoml` uses [flit]() for packaging. To install a development copy into your current venv do:
+
+  flit install -s --deps develop
+
+After install, you simply edit the files in place and the venv will use the source files directly.
+
 Contributing
 ============
 
