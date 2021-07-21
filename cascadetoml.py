@@ -16,7 +16,7 @@ import parse
 import tabulate as tabulate_lib
 
 # grumble grumble. This is the VCS' job.
-__version__ = "0.3.0"
+__version__ = "0.3.1"
 
 app = typer.Typer()
 
