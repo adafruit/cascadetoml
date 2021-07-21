@@ -330,6 +330,45 @@ def cli_coalesce(
     """Move common definitions to shared tomls"""
     coalesce(root)
 
+def rename(old_name, new_name, root: pathlib.Path):
+    possible_templates = list(root.glob("*.template.toml"))
+    if len(possible_templates) > 1:
+        raise ValueError("Only one template supported")
+    if not possible_templates:
+        raise ValueError("Template required")
+    template_path = possible_templates[0]
+    toml_template = tomlkit.parse(template_path.read_text())
+
+    if old_name not in toml_template:
+        raise ValueError("old_name not in template")
+    toml_template[new_name] = toml_template[old_name]
+    del toml_template[old_name]
+    template_path.write_text(tomlkit.dumps(toml_template))
+
+    for tomlpath in root.glob("**/*.toml"):
+        if tomlpath.name == ".cascade.toml":
+            continue
+        if tomlpath == template_path:
+            continue
+
+        parsed_leaf = tomlkit.parse(tomlpath.read_text())
+        if old_name not in parsed_leaf:
+            continue
+        parsed_leaf[new_name] = parsed_leaf[old_name]
+        del parsed_leaf[old_name]
+        tomlpath.write_text(tomlkit.dumps(parsed_leaf))
+
+@refactor_app.command(name="rename")
+def cli_rename(
+    old_name: str,
+    new_name: str,
+    root: pathlib.Path = typer.Option(
+        ".", help="Path to a cascade root. (Where `.cascade.toml` lives.)"
+    )
+):
+    """Rename a field in the toml"""
+    rename(old_name, new_name, root=root)
+
 def _toml_to_row(path, root_info, headers):
     leaf = tomlkit.parse(path.read_text())
 
