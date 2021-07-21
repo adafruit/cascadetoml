@@ -7,7 +7,6 @@
 import csv
 import io
 import pathlib
-import sys
 import typing
 import typer
 import tomlkit
@@ -28,6 +27,7 @@ app.add_typer(cascade_app, name="cascade")
 
 
 def cascade(paths: typing.List[pathlib.Path]) -> tomlkit.document:
+    """Cascades files to produce a single toml document."""
     # pylint: disable=too-many-locals,too-many-branches,too-many-statements
     output_doc = tomlkit.document()
 
@@ -151,9 +151,13 @@ def cli_files(paths: typing.List[pathlib.Path]):
     output_doc = cascade(paths)
     print(tomlkit.dumps(output_doc))
 
+
 def filter_toml(
-    root: pathlib.Path = pathlib.Path("."),
-    filters: typing.List[str] = []) -> tomlkit.document:
+    root: pathlib.Path = pathlib.Path("."), filters: typing.List[str] = None
+) -> tomlkit.document:
+    """Create a TOML document with one entry for every cascaded path that
+    matches the given filters. Filters are toml strings that define
+    acceptable values for the given keys."""
     root_toml = root / ".cascade.toml"
     if not root_toml.exists():
         raise ValueError("Missing root .cascade.toml")
@@ -165,8 +169,10 @@ def filter_toml(
     object_type = template[0].name[: -len(".template.toml")]
 
     acceptable_values = {}
-    for filter_toml in filters:
-        parsed = tomlkit.parse(filter_toml)
+    if filters is None:
+        filters = []
+    for toml_filter in filters:
+        parsed = tomlkit.parse(toml_filter)
         for k in parsed:
             if k not in acceptable_values:
                 acceptable_values[k] = []
@@ -203,6 +209,8 @@ def cli_filter(
 
 
 def check(root: pathlib.Path = pathlib.Path(".")):
+    """Checks that all toml files parse and that values match the template value
+    types."""
     possible_templates = list(root.glob("*.template.toml"))
     if len(possible_templates) > 1:
         raise ValueError("Only one template supported")
@@ -231,6 +239,7 @@ def check(root: pathlib.Path = pathlib.Path(".")):
             all_errors[root_relative] = errors
 
     return all_errors
+
 
 @app.command(name="check")
 def cli_check(
@@ -261,6 +270,7 @@ def cli_check(
 
 # Recursion!
 def coalesce(path: pathlib.Path):
+    """Migrate any common key/value pairs to shared TOML files when possible."""
     # pylint: disable=too-many-branches
     if path.is_dir():
         shared = None
@@ -269,7 +279,7 @@ def coalesce(path: pathlib.Path):
                 continue
             if entry.stem == path.name:
                 continue
-            data = _coalesce(entry)
+            data = coalesce(entry)
             if data:
                 if shared is None:
                     shared = data
@@ -328,7 +338,9 @@ def cli_coalesce(
     """Move common definitions to shared tomls"""
     coalesce(root)
 
+
 def rename(old_name, new_name, root: pathlib.Path):
+    """Rename a key within the given TOML files"""
     possible_templates = list(root.glob("*.template.toml"))
     if len(possible_templates) > 1:
         raise ValueError("Only one template supported")
@@ -356,27 +368,27 @@ def rename(old_name, new_name, root: pathlib.Path):
         del parsed_leaf[old_name]
         tomlpath.write_text(tomlkit.dumps(parsed_leaf))
 
+
 @refactor_app.command(name="rename")
 def cli_rename(
     old_name: str,
     new_name: str,
     root: pathlib.Path = typer.Option(
         ".", help="Path to a cascade root. (Where `.cascade.toml` lives.)"
-    )
+    ),
 ):
     """Rename a field in the toml"""
     rename(old_name, new_name, root=root)
+
 
 def _toml_to_row(path, root_info, headers):
     leaf = tomlkit.parse(path.read_text())
 
     parsed_path = None
-    template_path = None
     for template in reversed(root_info["paths"]):
         found = parse.parse(template, str(path))
         if found:
             parsed_path = found
-            template_path = template
             break
 
     if parsed_path:
@@ -393,24 +405,24 @@ def _toml_to_row(path, root_info, headers):
 
 def _tabulate(root, root_info, headers, depth=0):
     rows = []
-    for p in sorted(root.iterdir()):
-        if p.name[0] == ".":
+    for path in sorted(root.iterdir()):
+        if path.name[0] == ".":
             continue
-        if p.is_dir():
-            rows.append(_toml_to_row(p / (p.name + ".toml"), root_info, headers))
-            rows.extend(_tabulate(p, root_info, headers, depth+1))
+        if path.is_dir():
+            rows.append(_toml_to_row(path / (path.name + ".toml"), root_info, headers))
+            rows.extend(_tabulate(path, root_info, headers, depth + 1))
         elif depth > 0:
-            if p.stem == root.name:
+            if path.stem == root.name:
                 continue
-            rows.append(_toml_to_row(p, root_info, headers))
+            rows.append(_toml_to_row(path, root_info, headers))
 
     return rows
 
-@app.command()
+
 def tabulate(
-    root: pathlib.Path = pathlib.Path("."),
-    output_format: str = "simple"
-    ) -> str:
+    root: pathlib.Path = pathlib.Path("."), output_format: str = "simple"
+) -> str:
+    """Output a table of all the values encoded in the TOML files."""
     root_toml = root / ".cascade.toml"
     if not root_toml.exists():
         raise ValueError("Missing root .cascade.toml")
@@ -423,10 +435,10 @@ def tabulate(
 
     implicit_keys = []
     implied_paths = []
-    for p in root_info["paths"]:
-        implicit_keys.extend(parse.compile(p).named_fields)
-        p = pathlib.Path(p)
-        for parent in p.parents:
+    for path in root_info["paths"]:
+        implicit_keys.extend(parse.compile(path).named_fields)
+        path = pathlib.Path(path)
+        for parent in path.parents:
             if not parent.name:
                 continue
             implied_paths.append(str(parent / (parent.name + ".toml")))
@@ -440,7 +452,9 @@ def tabulate(
     data = _tabulate(root, root_info, headers)
 
     if output_format != "csv":
-        return tabulate_lib.tabulate(data, headers=headers, tablefmt=output_format, disable_numparse=True)
+        return tabulate_lib.tabulate(
+            data, headers=headers, tablefmt=output_format, disable_numparse=True
+        )
 
     string_output = io.StringIO()
     csvout = csv.writer(string_output)
@@ -448,23 +462,23 @@ def tabulate(
     csvout.writerows(data)
     return string_output.getvalue()
 
+
 @app.command(name="tabulate")
 def cli_tabulate(
     root: pathlib.Path = typer.Option(
         ".", help="Path to a cascade root. (Where `.cascade.toml` lives.)"
     ),
-    output_format: str = typer.Option(
-        "simple", help="tabulate library format or csv"
-    ),
-
-    ):
+    output_format: str = typer.Option("simple", help="tabulate library format or csv"),
+):
+    """Generate a table from all of the TOML. Useful for seeing all of the data in one file."""
     try:
         tabulated = tabulate(root, output_format)
     except ValueError as error:
         print(error)
         raise typer.Exit(code=1)
-    
+
     print(tabulated)
+
 
 if __name__ == "__main__":
     app()
