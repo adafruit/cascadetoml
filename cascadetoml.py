@@ -185,7 +185,6 @@ def filter_toml(
         for k in acceptable_values:
             if k not in entry or entry[k] not in acceptable_values[k]:
                 output_doc[object_type].remove(entry)
-                del output_doc[object_type].body[i]
     return output_doc
 
 
