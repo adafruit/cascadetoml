@@ -19,7 +19,7 @@ description-file = "README.md"
 requires = [
     "parse",
     "tabulate",
-    "tomlkit",
+    "tomlkit>=0.8.0",
     "typer"
 ]
 
