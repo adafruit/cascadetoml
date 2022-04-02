@@ -20,8 +20,8 @@ requires = [
     "parse",
     "tabulate",
     "tomlkit>=0.8.0",
-    "typer==0.4.0",
-    "click==8.0.4"
+    "typer",
+    "click"
 ]
 
 [tool.flit.scripts]
